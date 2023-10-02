@@ -1,16 +1,21 @@
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-// import * as sqs from 'aws-cdk-lib/aws-sqs';
+import  path from 'path';
 
 export class AwsServerlessStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    // The code that defines your stack goes here
+    const firstAPI = new cdk.aws_apigateway.RestApi(this, 'firstAPI', {});
 
-    // example resource
-    // const queue = new sqs.Queue(this, 'AwsServerlessQueue', {
-    //   visibilityTimeout: cdk.Duration.seconds(300)
-    // });
+    const diceResource = firstAPI.root.addResource('dice');
+
+    const rollADiceLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'rollADice', {
+      entry: path.join(__dirname, 'rollADice', 'index.ts'),
+      handler: 'handler',
+    });
+
+    diceResource.addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(rollADiceLambda));
+    diceResource.addResource('{diceCount}').addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(rollADiceLambda));
   }
 }
