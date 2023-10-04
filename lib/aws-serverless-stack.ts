@@ -64,5 +64,71 @@ export class AwsServerlessStack extends cdk.Stack {
     noteResources.addMethod('POST', new cdk.aws_apigateway.LambdaIntegration(createNoteLambda));
     noteResources.addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getAllNotesLambda));
     noteResources.addResource('{id}').addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getNoteLambda));
+
+    /**
+     * Article API
+     * */
+    const articleBucket = new cdk.aws_s3.Bucket(this, 'articleBucket', {
+      blockPublicAccess: cdk.aws_s3.BlockPublicAccess.BLOCK_ALL,
+      encryption: cdk.aws_s3.BucketEncryption.S3_MANAGED,
+      lifecycleRules: [
+        {
+          transitions: [
+            {
+              storageClass: cdk.aws_s3.StorageClass.INFREQUENT_ACCESS,
+              transitionAfter: cdk.Duration.days(0),
+            }
+          ],
+        }
+      ],
+    });
+
+    const articleTable = new cdk.aws_dynamodb.Table(this, 'articleTable', {
+      billingMode: cdk.aws_dynamodb.BillingMode.PAY_PER_REQUEST,
+      partitionKey: {
+        name: 'PK',
+        type: cdk.aws_dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: 'SK',
+        type: cdk.aws_dynamodb.AttributeType.STRING,
+      }
+    });
+
+    const getArticleLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'getArticle', {
+      entry: path.join(__dirname, 'articles', 'index.ts'),
+      handler: 'getArticle',
+      environment: {
+        BUCKET_NAME: articleBucket.bucketName,
+      }
+    });
+
+    const listArticlesLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'listArticles', {
+      entry: path.join(__dirname, 'articles', 'index.ts'),
+      handler: 'listArticles',
+      environment: {
+        TABLE_NAME: articleTable.tableName,
+      }
+    });
+
+    const publishArticleLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'publishArticle', {
+      entry: path.join(__dirname, 'articles', 'index.ts'),
+      handler: 'publishArticle',
+      environment: {
+        BUCKET_NAME: articleBucket.bucketName,
+        TABLE_NAME: articleTable.tableName,
+      }
+    });
+
+    const articleResources = firstAPI.root.addResource('articles');
+
+    articleResources.addMethod('POST', new cdk.aws_apigateway.LambdaIntegration(publishArticleLambda));
+    articleResources.addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(listArticlesLambda));
+    articleResources.addResource('{id}').addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getArticleLambda));
+
+    articleBucket.grantWrite(publishArticleLambda);
+    articleTable.grantWriteData(publishArticleLambda);
+    articleTable.grantReadData(listArticlesLambda);
+    articleBucket.grantRead(getArticleLambda);
   }
 }
