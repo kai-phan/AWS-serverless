@@ -76,7 +76,7 @@ export class AwsServerlessStack extends cdk.Stack {
           transitions: [
             {
               storageClass: cdk.aws_s3.StorageClass.INFREQUENT_ACCESS,
-              transitionAfter: cdk.Duration.days(0),
+              transitionAfter: cdk.Duration.days(30),
             }
           ],
         }
@@ -120,15 +120,42 @@ export class AwsServerlessStack extends cdk.Stack {
       }
     });
 
+    const updateArticleLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'updateArticle', {
+      entry: path.join(__dirname, 'articles', 'index.ts'),
+      handler: 'updateArticle',
+      environment: {
+        TABLE_NAME: articleTable.tableName,
+        BUCKET_NAME: articleBucket.bucketName,
+      }
+    });
+
+    const deleteArticleLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'deleteArticle', {
+      entry: path.join(__dirname, 'articles', 'index.ts'),
+      handler: 'deleteArticle',
+      environment: {
+        TABLE_NAME: articleTable.tableName,
+        BUCKET_NAME: articleBucket.bucketName,
+      }
+    });
+
     const articleResources = firstAPI.root.addResource('articles');
 
     articleResources.addMethod('POST', new cdk.aws_apigateway.LambdaIntegration(publishArticleLambda));
     articleResources.addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(listArticlesLambda));
-    articleResources.addResource('{id}').addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getArticleLambda));
+
+    const articleByIdResources = articleResources.addResource('{id}');
+
+    articleByIdResources.addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(getArticleLambda));
+    articleByIdResources.addMethod('PUT', new cdk.aws_apigateway.LambdaIntegration(updateArticleLambda));
+    articleByIdResources.addMethod('DELETE', new cdk.aws_apigateway.LambdaIntegration(deleteArticleLambda));
 
     articleBucket.grantWrite(publishArticleLambda);
     articleTable.grantWriteData(publishArticleLambda);
     articleTable.grantReadData(listArticlesLambda);
     articleBucket.grantRead(getArticleLambda);
+    articleTable.grantWriteData(updateArticleLambda);
+    articleBucket.grantWrite(updateArticleLambda);
+    articleTable.grantWriteData(deleteArticleLambda);
+    articleBucket.grantWrite(deleteArticleLambda);
   }
 }
