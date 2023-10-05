@@ -237,6 +237,35 @@ export class AwsServerlessStack extends cdk.Stack {
     firstAPI.root.addResource('secret').addMethod('GET', new cdk.aws_apigateway.LambdaIntegration(secretLambda), {
       authorizer,
       authorizationType: cdk.aws_apigateway.AuthorizationType.COGNITO,
-    })
+    });
+
+    /** Upload */
+    const fileUpload = new cdk.aws_s3.Bucket(this, 'fileUpload', {
+      encryption: cdk.aws_s3.BucketEncryption.S3_MANAGED,
+      lifecycleRules: [
+        {
+          transitions: [
+            {
+              storageClass: cdk.aws_s3.StorageClass.INFREQUENT_ACCESS,
+              transitionAfter: cdk.Duration.days(30),
+            }
+          ],
+        }
+      ],
+    });
+
+    const presignImageLambda = new cdk.aws_lambda_nodejs.NodejsFunction(this, 'presignImage', {
+      entry: path.join(__dirname, 'upload', 'index.ts'),
+      handler: 'presignImage',
+      environment: {
+        BUCKET_NAME: fileUpload.bucketName,
+      }
+    });
+
+    fileUpload.grantWrite(presignImageLambda);
+
+    const uploadResource = firstAPI.root.addResource('upload');
+
+    uploadResource.addResource('presign').addMethod('POST', new cdk.aws_apigateway.LambdaIntegration(presignImageLambda));
   }
 }
